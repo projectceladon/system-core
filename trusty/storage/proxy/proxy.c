@@ -21,14 +21,18 @@
 #include <stdlib.h>
 #include <sys/capability.h>
 #include <sys/prctl.h>
+#include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include <cutils/android_filesystem_config.h>
+#include <linux/major.h>
+
+#include <private/android_filesystem_config.h>
 
 #include "ipc.h"
 #include "log.h"
 #include "rpmb.h"
+#include "rpmb-dev.h"
 #include "storage.h"
 
 #define REQ_BUFFER_SIZE 4096
@@ -47,6 +51,8 @@ static const struct option _lopts[] =  {
     {"rpmb_dev",   required_argument, NULL, 'r'},
     {0, 0, 0, 0}
 };
+
+static unsigned int rpmb_major;
 
 static void show_usage_and_exit(int code)
 {
@@ -148,7 +154,10 @@ static int handle_req(struct storage_msg *msg, const void *req, size_t req_len)
         break;
 
     case STORAGE_RPMB_SEND:
-        rc = rpmb_send(msg, req, req_len);
+        if (rpmb_major == MMC_BLOCK_MAJOR)
+            rc = rpmb_send(msg, req, req_len);
+        else
+            rc = rpmb_dev_send(msg, req, req_len);
         break;
 
     default:
@@ -229,10 +238,17 @@ static void parse_args(int argc, char *argv[])
 int main(int argc, char *argv[])
 {
     int rc;
+    uint retry_cnt;
+    struct stat st;
 
-    /* drop privileges */
+    /*service is enabled with system rather than root privelege,
+    so that drop_privs() is not required. This usage is more secure
+    than enableing with root preveledge and dropping redundant privs.
+    */
+    /* drop privileges
     if (drop_privs() < 0)
         return EXIT_FAILURE;
+    */
 
     /* parse arguments */
     parse_args(argc, argv);
@@ -243,7 +259,16 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
 
     /* open rpmb device */
-    rc = rpmb_open(rpmb_devname);
+    rc = lstat(rpmb_devname, &st);
+    if (rc < 0)
+        return EXIT_FAILURE;
+    rpmb_major = major(st.st_dev);
+
+    if (rpmb_major == MMC_BLOCK_MAJOR)
+        rc = rpmb_open(rpmb_devname);
+    else
+        rc = rpmb_dev_open(rpmb_devname);
+
     if (rc < 0)
         return EXIT_FAILURE;
 
@@ -257,7 +282,10 @@ int main(int argc, char *argv[])
     ALOGE("exiting proxy loop with status (%d)\n", rc);
 
     ipc_disconnect();
-    rpmb_close();
+    if (rpmb_major == MMC_BLOCK_MAJOR)
+        rpmb_close();
+    else
+        rpmb_dev_close();
 
     return (rc < 0) ? EXIT_FAILURE : EXIT_SUCCESS;
 }
