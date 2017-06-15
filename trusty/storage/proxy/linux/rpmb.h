@@ -146,7 +146,7 @@ struct rpmb_ioc_seq_cmd {
 	struct rpmb_ioc_cmd cmds[0];
 };
 
-#define RPMB_IOC_REQ_CMD _IOWR(0xB5, 0, struct rpmb_ioc_req_cmd)
-#define RPMB_IOC_SEQ_CMD _IOWR(0xB5, 1, struct rpmb_ioc_seq_cmd)
+#define RPMB_IOC_REQ_CMD _IOWR(0xB5, 80, struct rpmb_ioc_req_cmd)
+#define RPMB_IOC_SEQ_CMD _IOWR(0xB5, 81, struct rpmb_ioc_seq_cmd)
 
 #endif /* _UAPI_LINUX_RPMB_H_ */
