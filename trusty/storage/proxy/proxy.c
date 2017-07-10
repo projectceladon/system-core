@@ -20,6 +20,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <sys/capability.h>
+#include <sys/sysmacros.h>
 #include <sys/prctl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
