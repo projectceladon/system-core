@@ -34,10 +34,16 @@
 #include "log.h"
 #include "rpmb.h"
 #include "rpmb-dev.h"
+#include "rpmb-sim.h"
 #include "storage.h"
 
 #define REQ_BUFFER_SIZE 4096
+/* /dev/block/mmcblk1p13 */
+#define RPMB_SIM_DEV_NAME       "/dev/block/by-name/teedata"
+
 static uint8_t req_buffer[REQ_BUFFER_SIZE + 1];
+
+static unsigned int rpmb_sim;
 
 static const char *ss_data_root;
 static const char *trusty_devname;
@@ -52,8 +58,6 @@ static const struct option _lopts[] =  {
     {"rpmb_dev",   required_argument, NULL, 'r'},
     {0, 0, 0, 0}
 };
-
-static unsigned int rpmb_major;
 
 static void show_usage_and_exit(int code)
 {
@@ -155,8 +159,8 @@ static int handle_req(struct storage_msg *msg, const void *req, size_t req_len)
         break;
 
     case STORAGE_RPMB_SEND:
-        if (rpmb_major == MMC_BLOCK_MAJOR)
-            rc = rpmb_send(msg, req, req_len);
+        if (rpmb_sim)
+            rc = rpmb_sim_send(msg, req, req_len);
         else
             rc = rpmb_dev_send(msg, req, req_len);
         break;
@@ -242,6 +246,17 @@ int main(int argc, char *argv[])
     uint retry_cnt;
     struct stat st;
 
+    rc = rpmb_sim_open(RPMB_SIM_DEV_NAME);
+    if (rc < 0)
+        rpmb_sim = 0;
+    else
+        rpmb_sim = is_use_sim_rpmb();
+
+    if (rpmb_sim)
+        ALOGI("storage use simulation rpmb.\n");
+    else
+        ALOGI("storage use physical rpmb.\n");
+
     /*service is enabled with system rather than root privelege,
     so that drop_privs() is not required. This usage is more secure
     than enableing with root preveledge and dropping redundant privs.
@@ -263,12 +278,11 @@ int main(int argc, char *argv[])
     rc = lstat(rpmb_devname, &st);
     if (rc < 0)
         return EXIT_FAILURE;
-    rpmb_major = major(st.st_dev);
 
-    if (rpmb_major == MMC_BLOCK_MAJOR)
-        rc = rpmb_open(rpmb_devname);
-    else
+    if (!rpmb_sim) {
+        rpmb_sim_close();
         rc = rpmb_dev_open(rpmb_devname);
+    }
 
     if (rc < 0)
         return EXIT_FAILURE;
@@ -283,8 +297,9 @@ int main(int argc, char *argv[])
     ALOGE("exiting proxy loop with status (%d)\n", rc);
 
     ipc_disconnect();
-    if (rpmb_major == MMC_BLOCK_MAJOR)
-        rpmb_close();
+
+    if (rpmb_sim)
+        rpmb_sim_close();
     else
         rpmb_dev_close();
 

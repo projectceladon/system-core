@@ -123,7 +123,7 @@ static enum storage_err translate_errno(int error)
     return result;
 }
 
-static ssize_t write_with_retry(int fd, const void *buf_, size_t size, off_t offset)
+ssize_t write_with_retry(int fd, const void *buf_, size_t size, off_t offset)
 {
     ssize_t rc;
     const uint8_t *buf = buf_;
@@ -139,7 +139,7 @@ static ssize_t write_with_retry(int fd, const void *buf_, size_t size, off_t off
     return 0;
 }
 
-static ssize_t read_with_retry(int fd, void *buf_, size_t size, off_t offset)
+ssize_t read_with_retry(int fd, void *buf_, size_t size, off_t offset)
 {
     ssize_t rc;
     size_t  rcnt = 0;

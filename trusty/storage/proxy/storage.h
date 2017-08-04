@@ -43,3 +43,7 @@ int storage_init(const char *dirname);
 
 int storage_sync_checkpoint(void);
 
+ssize_t write_with_retry(int fd, const void *buf_, size_t size, off_t offset);
+
+ssize_t read_with_retry(int fd, void *buf_, size_t size, off_t offset);
+

@@ -21,8 +21,10 @@ cc_binary {
     srcs: [
         "ipc.c",
         "rpmb.c",
+        "rpmb-dev.c",
         "storage.c",
         "proxy.c",
+        "rpmb-sim.c",
     ],
 
     shared_libs: ["liblog"],
