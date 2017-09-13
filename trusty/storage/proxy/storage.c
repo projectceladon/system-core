@@ -136,6 +136,11 @@ ssize_t write_with_retry(int fd, const void *buf_, size_t size, off_t offset)
         buf += rc;
         offset += rc;
     }
+    rc = fsync(fd);
+    if (rc < 0) {
+        ALOGE("fsync for fd=%d failed: %s\n", fd, strerror(errno));
+        return rc;
+    }
     return 0;
 }
 
