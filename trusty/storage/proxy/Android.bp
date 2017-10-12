@@ -15,7 +15,7 @@
 //
 
 cc_binary {
-    name: "storageproxyd",
+    name: "intelstorageproxyd",
     vendor: true,
 
     srcs: [
@@ -27,11 +27,13 @@ cc_binary {
         "rpmb-sim.c",
     ],
 
-    shared_libs: ["liblog"],
-    header_libs: ["libcutils_headers"],
+    shared_libs: [
+        "liblog",
+        "libcrypto",
+    ],
 
     static_libs: [
-        "libtrustystorageinterface",
+        "libinteltrustystorageinterface",
         "libtrusty",
     ],
 

@@ -15,7 +15,7 @@
 //
 
 cc_library_static {
-    name: "libtrustystorage",
+    name: "libinteltrustystorage",
     vendor: true,
 
     srcs: ["storage.c"],
@@ -23,11 +23,9 @@ cc_library_static {
     export_include_dirs: ["include"],
 
     static_libs: [
-        "libtrusty",
-        "libtrustystorageinterface",
-    ],
-    shared_libs: [
         "liblog",
+        "libtrusty",
+        "libinteltrustystorageinterface",
     ],
 
     cflags: [
