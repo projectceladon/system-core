@@ -28,7 +28,7 @@
 
 #include <linux/major.h>
 
-#include <private/android_filesystem_config.h>
+#include <cutils/android_filesystem_config.h>
 
 #include "ipc.h"
 #include "log.h"

@@ -23,9 +23,17 @@ cc_library_static {
     export_include_dirs: ["include"],
 
     static_libs: [
-        "liblog",
         "libtrusty",
         "libinteltrustystorageinterface",
+    ],
+
+    shared_libs: [
+        "liblog",
+    ],
+
+    header_libs: [
+        "liblog_headers",
+        "libcutils_headers",
     ],
 
     cflags: [

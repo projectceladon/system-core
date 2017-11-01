@@ -30,6 +30,9 @@ cc_test {
         "libinteltrustystorageinterface",
         "libinteltrustystorage",
         "libtrusty",
+    ],
+
+    shared_libs: [
         "liblog",
     ],
 
