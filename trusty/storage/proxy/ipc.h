@@ -17,6 +17,7 @@
 
 #include <stdint.h>
 #include <trusty/interface/storage.h>
+#include <unistd.h>
 
 int ipc_connect(const char *device, const char *service_name);
 void ipc_disconnect(void);
