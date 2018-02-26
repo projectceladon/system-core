@@ -202,7 +202,6 @@ static void parse_args(int argc, char *argv[])
 int main(int argc, char *argv[])
 {
     int rc;
-    struct stat st;
 
     rc = rpmb_sim_open(RPMB_SIM_DEV_NAME);
     if (rc < 0)
@@ -215,25 +214,11 @@ int main(int argc, char *argv[])
     else
         ALOGI("storage use physical rpmb.\n");
 
-    /*service is enabled with system rather than root privelege,
-    so that drop_privs() is not required. This usage is more secure
-    than enableing with root preveledge and dropping redundant privs.
-    */
-    /* drop privileges
-    if (drop_privs() < 0)
-        return EXIT_FAILURE;
-    */
-
     /* parse arguments */
     parse_args(argc, argv);
 
     /* initialize secure storage directory */
     rc = storage_init(ss_data_root);
-    if (rc < 0)
-        return EXIT_FAILURE;
-
-    /* open rpmb device */
-    rc = lstat(rpmb_devname, &st);
     if (rc < 0)
         return EXIT_FAILURE;
 
