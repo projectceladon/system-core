@@ -15,7 +15,7 @@
 //
 
 cc_library_static {
-    name: "libinteltrustystorageinterface",
+    name: "libtrustystorageinterface",
     vendor: true,
     export_include_dirs: ["include"],
 }

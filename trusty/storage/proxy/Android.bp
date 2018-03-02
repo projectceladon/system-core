@@ -15,7 +15,7 @@
 //
 
 cc_binary {
-    name: "intelstorageproxyd",
+    name: "storageproxyd",
     vendor: true,
 
     srcs: [
@@ -33,7 +33,7 @@ cc_binary {
     ],
 
     static_libs: [
-        "libinteltrustystorageinterface",
+        "libtrustystorageinterface",
         "libtrusty",
     ],
 

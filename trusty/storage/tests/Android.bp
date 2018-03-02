@@ -15,7 +15,7 @@
 //
 
 cc_test {
-    name: "intel-secure-storage-unit-test",
+    name: "secure-storage-unit-test",
     vendor: true,
 
     cflags: [
@@ -27,8 +27,8 @@ cc_test {
     ],
 
     static_libs: [
-        "libinteltrustystorageinterface",
-        "libinteltrustystorage",
+        "libtrustystorageinterface",
+        "libtrustystorage",
         "libtrusty",
     ],
 
