@@ -57,7 +57,8 @@ using namespace std::chrono_literals;
 // on a device kernel that has been running for a while fragmenting its
 // memory so we start with a larger allocation, and shrink the amount if
 // necessary.
-#define USB_FFS_BULK_SIZE 16384
+#define USB_FFS_BULK_SIZE (64*1024)
+#define USB_DBC_BULK_SIZE (64*1024)
 
 #define cpu_to_le16(x) htole16(x)
 #define cpu_to_le32(x) htole32(x)
@@ -459,10 +460,139 @@ static void usb_ffs_init() {
     std::thread(usb_ffs_open_thread, h).detach();
 }
 
+bool init_dbc_raw(struct usb_handle* h) {
+    D("init_dbc_raw called\n");
+    h->max_rw = USB_DBC_BULK_SIZE;
+
+    h->bulk_out = adb_open(USB_DBC_ADB_PATH, O_RDWR);
+    if (h->bulk_out < 0) {
+        D("[ %s: cannot open bulk-out ep: errno=%d ]", USB_DBC_ADB_PATH, errno);
+        goto err;
+    }
+
+    h->bulk_in = h->bulk_out;
+    h->control = h->bulk_out;
+
+    return true;
+
+err:
+    h->bulk_out = -1;
+    h->bulk_in = -1;
+    h->control = -1;
+    return false;
+}
+
+static void usb_dbc_open_thread(void* x) {
+    struct usb_handle* usb = (struct usb_handle*)x;
+
+    adb_thread_setname("usb dbc open");
+    D("dbc_open_thread called\n");
+    while (true) {
+        // wait until the USB device needs opening
+        std::unique_lock<std::mutex> lock(usb->lock);
+        while (!usb->open_new_connection) {
+            usb->notify.wait(lock);
+        }
+        usb->open_new_connection = false;
+        lock.unlock();
+
+        while (true) {
+            if (init_dbc_raw(usb)) {
+                break;
+            }
+            std::this_thread::sleep_for(1s);
+        }
+
+        D("register usb transport\n");
+        register_usb_transport(usb, 0, 0, 1);
+    }
+
+    // never gets here
+    abort();
+}
+
+static int usb_dbc_write(usb_handle* h, const void* data, int len) {
+    D("about to write (fd=%d, len=%d)", h->bulk_in, len);
+
+    const char* buf = static_cast<const char*>(data);
+    while (len > 0) {
+        int write_len = std::min(h->max_rw, len);
+        int n = adb_write(h->bulk_in, buf, write_len);
+        if (n < 0) {
+            D("ERROR: fd = %d, n = %d: %s", h->bulk_in, n, strerror(errno));
+            return -1;
+        }
+        buf += n;
+        len -= n;
+    }
+
+    D("[ done fd=%d ]", h->bulk_in);
+    return 0;
+}
+
+static int usb_dbc_read(usb_handle* h, void* data, int len) {
+    D("about to read (fd=%d, len=%d)", h->bulk_out, len);
+
+    char* buf = static_cast<char*>(data);
+    while (len > 0) {
+        int read_len = std::min(h->max_rw, len);
+        int n = adb_read(h->bulk_out, buf, read_len);
+        if (n < 0) {
+            D("ERROR: fd = %d, n = %d: %s", h->bulk_out, n, strerror(errno));
+            return -1;
+        }
+        buf += n;
+        len -= n;
+    }
+    D("[ done fd=%d ]", h->bulk_out);
+    return 0;
+}
+
+static void usb_dbc_kick(usb_handle* h) {
+    int err;
+    D("usb_dbc_kick called\n");
+    err = ioctl(h->bulk_in, FLUSH_DBC_EP);
+    if (err < 0) {
+        D("[ kick: source (fd=%d) clear halt failed (%d) ]", h->bulk_in, errno);
+    }
+    h->kicked = true;
+}
+
+static void usb_dbc_close(usb_handle* h) {
+    h->kicked = false;
+		D("usb_dbc_close called\n");
+    adb_close(h->bulk_out);
+    // Notify usb_adb_open_thread to open a new connection.
+    h->lock.lock();
+    h->open_new_connection = true;
+    h->lock.unlock();
+    h->notify.notify_one();
+}
+
+static void usb_dbc_init() {
+    D("[ usb_init - using dbc ]");
+
+    usb_handle* h = new usb_handle();
+
+    h->write = usb_dbc_write;
+    h->read = usb_dbc_read;
+    h->kick = usb_dbc_kick;
+    h->close = usb_dbc_close;
+
+    D("[ usb_init - starting thread ]");
+    std::thread(usb_dbc_open_thread, h).detach();
+}
+
+
 void usb_init() {
     dummy_fd = adb_open("/dev/null", O_WRONLY);
     CHECK_NE(dummy_fd, -1);
-    usb_ffs_init();
+
+    if (access(USB_DBC_ADB_PATH,F_OK) == 0)
+        usb_dbc_init();
+    else
+        usb_ffs_init();
+
 }
 
 int usb_write(usb_handle* h, const void* data, int len) {
