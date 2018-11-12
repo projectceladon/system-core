@@ -25,6 +25,7 @@
 #include <getopt.h>
 #include <sys/prctl.h>
 
+#include <stdio.h>
 #include <memory>
 
 #include <android-base/logging.h>
@@ -177,7 +178,7 @@ int adbd_main(int server_port) {
     drop_privileges(server_port);
 
     bool is_usb = false;
-    if (access(USB_FFS_ADB_EP0, F_OK) == 0) {
+    if ( (access(USB_FFS_ADB_EP0, F_OK) == 0) || (access(USB_DBC_ADB_PATH,F_OK) == 0) ) {
         // Listen on USB.
         usb_init();
         is_usb = true;

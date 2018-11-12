@@ -350,6 +350,9 @@ static int usb_bulk_read(usb_handle* h, void* data, int len) {
     urb->buffer = data;
     urb->buffer_length = len;
 
+    usbdevfs_ctrltransfer ufs;
+    unsigned short int ufsdata;
+
     if (h->dead) {
         errno = EINVAL;
         return -1;
@@ -364,13 +367,55 @@ static int usb_bulk_read(usb_handle* h, void* data, int len) {
         D("[ reap urb - wait ]");
         h->reaper_thread = pthread_self();
         int fd = h->fd;
+
+        ufsdata = 0;
+        ufs.bRequestType = 0x82;
+        ufs.bRequest = USB_REQ_GET_STATUS;
+        ufs.wValue = 0x0000;
+        ufs.wIndex = h->ep_in;
+        ufs.wLength = 0x0002;
+        ufs.data = &ufsdata;
+
+        if(TEMP_FAILURE_RETRY(ioctl(h->fd,USBDEVFS_CONTROL,&ufs))== -1)
+        {
+            D("clear_halt read failed");}
+        else
+        {
+            D("clear_halt read successful %d",ufsdata);
+        }
+
+        if(ufsdata)
+        {
+            ufs.bRequestType = 0x02;
+            ufs.bRequest = USB_REQ_CLEAR_FEATURE;
+            ufs.wValue = 0x0000;
+            ufs.wIndex = h->ep_out;
+            ufs.wLength = 0x0000;
+            ufs.data = NULL;
+
+            if(TEMP_FAILURE_RETRY(ioctl(h->fd,USBDEVFS_CONTROL,&ufs))== -1)
+            {
+                D("clear_halt read2 failed");
+            }
+            else
+            {
+                D("clear_halt read2 successful ");
+            }
+        errno = ETIMEDOUT;
+        return -1;
+        }
+
         lock.unlock();
 
         // This ioctl must not have TEMP_FAILURE_RETRY because we send SIGALRM to break out.
+
         usbdevfs_urb* out = nullptr;
+        D("before reap urb");
+
         int res = ioctl(fd, USBDEVFS_REAPURB, &out);
         int saved_errno = errno;
 
+        D("after reap urb");
         lock.lock();
         h->reaper_thread = 0;
         if (h->dead) {
