@@ -1,0 +1,185 @@
+From f764d897374fe04cf32c93d23faeeb6820419dcb Mon Sep 17 00:00:00 2001
+From: Prabhat Chand Pandey <prabhat.chand.pandey@intel.com>
+Date: Thu, 5 Sep 2019 14:06:21 +0530
+Subject: [PATCH] system : adb : dbc :  adb over dbc tty
+
+Tracked-On: OAM-85319
+Signed-off-by: Prabhat Chand Pandey <prabhat.chand.pandey@intel.com>
+---
+ adb/adb.h          |  2 +-
+ adb/daemon/usb.cpp | 54 +++++++++++++++++++++++++++++++++-------------
+ 2 files changed, 40 insertions(+), 16 deletions(-)
+
+diff --git a/adb/adb.h b/adb/adb.h
+index 5c8cd78bc..c3a5567bd 100644
+--- a/adb/adb.h
++++ b/adb/adb.h
+@@ -208,7 +208,7 @@ extern const char* adb_device_banner;
+ #define USB_FFS_ADB_EP0 USB_FFS_ADB_EP(ep0)
+ #define USB_FFS_ADB_OUT USB_FFS_ADB_EP(ep1)
+ #define USB_FFS_ADB_IN USB_FFS_ADB_EP(ep2)
+-#define USB_DBC_ADB_PATH  "/dev/dbc_raw0"
++#define USB_DBC_ADB_PATH  "/dev/ttyDBC0"
+ #endif
+ 
+ int handle_host_request(const char* service, TransportType type, const char* serial,
+diff --git a/adb/daemon/usb.cpp b/adb/daemon/usb.cpp
+index 60e05a849..15152dae5 100644
+--- a/adb/daemon/usb.cpp
++++ b/adb/daemon/usb.cpp
+@@ -23,6 +23,7 @@
+ #include <linux/usb/ch9.h>
+ #include <linux/usb/functionfs.h>
+ #include <stdio.h>
++#include <termios.h>
+ #include <stdlib.h>
+ #include <string.h>
+ #include <sys/ioctl.h>
+@@ -518,7 +519,7 @@ static void usb_ffs_close(usb_handle* h) {
+ }
+ 
+ static void usb_ffs_init() {
+-    D("[ usb_init - using FunctionFS ]");
++    LOG(INFO) << "[ usb_init - using FunctionFS ]";
+ 
+     usb_handle* h = new usb_handle();
+ 
+@@ -536,20 +537,43 @@ static void usb_ffs_init() {
+     h->kick = usb_ffs_kick;
+     h->close = usb_ffs_close;
+ 
+-    D("[ usb_init - starting thread ]");
++    LOG(INFO) << "[ usb_init - starting thread ]";
+     std::thread(usb_ffs_open_thread, h).detach();
+ }
+ 
+ bool init_dbc_raw(struct usb_handle* h) {
+-    D("init_dbc_raw called\n");
++
++	struct termios SerialPortSettings;
++
++    LOG(INFO) << "init_dbc_raw called\n";
+     h->max_rw = USB_DBC_BULK_SIZE;
+ 
+     h->bulk_out = adb_open(USB_DBC_ADB_PATH, O_RDWR);
++
+     if (h->bulk_out < 0) {
+-        D("[ %s: cannot open bulk-out ep: errno=%d ]", USB_DBC_ADB_PATH, errno);
++        LOG(INFO) << "[ %s: cannot open bulk-out ep: errno=%d ]" << USB_DBC_ADB_PATH << " " << errno;
+         goto err;
+     }
+ 
++	tcgetattr(h->bulk_out, &SerialPortSettings);
++
++	cfsetispeed(&SerialPortSettings,B9600);
++	cfsetospeed(&SerialPortSettings,B9600);
++
++	SerialPortSettings.c_cflag &= ~PARENB;
++	SerialPortSettings.c_cflag &= ~CSTOPB;
++	SerialPortSettings.c_cflag &= ~CSIZE;
++	SerialPortSettings.c_cflag &= CS8;
++	SerialPortSettings.c_cflag &= ~CRTSCTS;
++	SerialPortSettings.c_cflag &= CREAD | CLOCAL;
++	SerialPortSettings.c_lflag &= ~(ICANON | ECHO | IEXTEN | ISIG);
++	SerialPortSettings.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
++	SerialPortSettings.c_oflag &= ~OPOST;
++	SerialPortSettings.c_cc[VMIN] = 10;
++	SerialPortSettings.c_cc[VTIME] = 10;
++
++	tcsetattr(h->bulk_out, TCSANOW, &SerialPortSettings);
++
+     h->bulk_in = h->bulk_out;
+     h->control = h->bulk_out;
+ 
+@@ -566,7 +590,7 @@ static void usb_dbc_open_thread(void* x) {
+     struct usb_handle* usb = (struct usb_handle*)x;
+ 
+     adb_thread_setname("usb dbc open");
+-    D("dbc_open_thread called\n");
++    LOG(INFO) << "dbc_open_thread called\n";
+     while (true) {
+         // wait until the USB device needs opening
+         std::unique_lock<std::mutex> lock(usb->lock);
+@@ -583,7 +607,7 @@ static void usb_dbc_open_thread(void* x) {
+             std::this_thread::sleep_for(1s);
+         }
+ 
+-        D("register usb transport\n");
++        LOG(INFO) << "register usb transport\n";
+         register_usb_transport(usb, 0, 0, 1);
+     }
+ 
+@@ -592,45 +616,45 @@ static void usb_dbc_open_thread(void* x) {
+ }
+ 
+ static int usb_dbc_write(usb_handle* h, const void* data, int len) {
+-    D("about to write (fd=%d, len=%d)", h->bulk_in, len);
++    LOG(INFO) << "about to write (fd=%d, len=%d)" << h->bulk_in, len;
+ 
+     const char* buf = static_cast<const char*>(data);
+     while (len > 0) {
+         int write_len = std::min(h->max_rw, len);
+         int n = adb_write(h->bulk_in, buf, write_len);
+         if (n < 0) {
+-            D("ERROR: fd = %d, n = %d: %s", h->bulk_in, n, strerror(errno));
++            LOG(INFO) << "ERROR: fd = %d, n = %d: %s" << h->bulk_in << n << strerror(errno);
+             return -1;
+         }
+         buf += n;
+         len -= n;
+     }
+ 
+-    D("[ done fd=%d ]", h->bulk_in);
++    LOG(INFO) << "[ done fd=%d ]", h->bulk_in;
+     return 0;
+ }
+ 
+ static int usb_dbc_read(usb_handle* h, void* data, int len) {
+-    D("about to read (fd=%d, len=%d)", h->bulk_out, len);
++    LOG(INFO) << "about to read (fd=%d, len=%d)" << h->bulk_out << len;
+ 
+     char* buf = static_cast<char*>(data);
+     while (len > 0) {
+         int read_len = std::min(h->max_rw, len);
+         int n = adb_read(h->bulk_out, buf, read_len);
+         if (n < 0) {
+-            D("ERROR: fd = %d, n = %d: %s", h->bulk_out, n, strerror(errno));
++            LOG(INFO) << "ERROR: fd = %d, n = %d: %s" << h->bulk_out << n << strerror(errno);
+             return -1;
+         }
+         buf += n;
+         len -= n;
+     }
+-    D("[ done fd=%d ]", h->bulk_out);
++    LOG(INFO) << "[ done fd=%d ]", h->bulk_out;
+     return 0;
+ }
+ 
+ static void usb_dbc_close(usb_handle* h) {
+     h->kicked = false;
+-		D("usb_dbc_close called\n");
++		LOG(INFO) << "usb_dbc_close called\n";
+     adb_close(h->bulk_out);
+     // Notify usb_adb_open_thread to open a new connection.
+     h->lock.lock();
+@@ -640,7 +664,7 @@ static void usb_dbc_close(usb_handle* h) {
+ }
+ 
+ static void usb_dbc_init() {
+-    D("[ usb_init - using dbc ]");
++    LOG(INFO) << "[ usb_init - using dbc ]";
+ 
+     usb_handle* h = new usb_handle();
+ 
+@@ -648,7 +672,7 @@ static void usb_dbc_init() {
+     h->read = usb_dbc_read;
+     h->close = usb_dbc_close;
+ 
+-    D("[ usb_init - starting thread ]");
++    LOG(INFO) << "[ usb_init - starting thread ]";
+     std::thread(usb_dbc_open_thread, h).detach();
+ }
+ 
+-- 
+2.21.0
+
