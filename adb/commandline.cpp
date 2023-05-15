@@ -67,6 +67,7 @@ static int install_multiple_app(int argc, const char** argv);
 static int uninstall_app(int argc, const char** argv);
 static int install_app_legacy(int argc, const char** argv);
 static int uninstall_app_legacy(int argc, const char** argv);
+static int adb_query_command(const std::string& command);
 
 extern int gListenAll;
 
@@ -1040,7 +1041,12 @@ static bool adb_root(const char* command) {
         return false;
     }
 
+    // Give adbd some time to kill itself and come back up.
+    // We can't use wait-for-device because devices (e.g. adb over network) might not come back.
+    std::this_thread::sleep_for(1s);
+
     // Figure out whether we actually did anything.
+/*
     char buf[256];
     char* cur = buf;
     ssize_t bytes_left = sizeof(buf);
@@ -1066,10 +1072,8 @@ static bool adb_root(const char* command) {
     if (cur != buf && strstr(buf, "restarting") == nullptr) {
         return true;
     }
+*/
 
-    // Give adbd some time to kill itself and come back up.
-    // We can't use wait-for-device because devices (e.g. adb over network) might not come back.
-    std::this_thread::sleep_for(3s);
     return true;
 }
 
@@ -1608,7 +1612,7 @@ int adb_commandline(int argc, const char** argv) {
         }
         return adb_connect_command(command);
     } else if (!strcmp(argv[0], "root") || !strcmp(argv[0], "unroot")) {
-        return adb_root(argv[0]) ? 0 : 1;
+        return adb_root(argv[0]) ? adb_query_command(format_host_command("reconnect")) : 1;
     } else if (!strcmp(argv[0], "bugreport")) {
         Bugreport bugreport;
         return bugreport.DoIt(argc, argv);
